@@ -63,10 +63,6 @@ SCREEN_W       = 320  # Mode 1 pixels wide
 SCREEN_H       = 256  # scanlines
 BYTES_PER_ROW  = 80   # SCREEN_W // 4 pixels-per-byte
 
-INV_GAMMA = 1.7       # inverse gamma applied to input pixels
-BORDER    = 0.1       # fraction of range reserved at top and bottom
-
-
 # ── BBC colour utilities ──────────────────────────────────────────────────────
 
 def col_to_rgb(col: int):
@@ -314,19 +310,6 @@ def blue_noise_dither_2(x: int, y: int, r: int, g: int, b: int,
     return col_list[threshold >> 6]   # 0-63→0, 64-127→1, 128-191→2, 192-255→3
 
 
-# ── Image preprocessing ───────────────────────────────────────────────────────
-
-def preprocess_pixel(r: int, g: int, b: int):
-    """
-    Apply inverse gamma and border clamping, matching OCaml get_rgb.
-    Returns (r, g, b) in 0-255, with contrast compressed by BORDER.
-    """
-    cr = BORDER + (1.0 - BORDER * 2.0) * (r / 255.0) ** INV_GAMMA
-    cg = BORDER + (1.0 - BORDER * 2.0) * (g / 255.0) ** INV_GAMMA
-    cb = BORDER + (1.0 - BORDER * 2.0) * (b / 255.0) ** INV_GAMMA
-    return int(cr * 255), int(cg * 255), int(cb * 255)
-
-
 # ── Dithering ─────────────────────────────────────────────────────────────────
 
 def dither_section_ordered(img: np.ndarray, section: int, randomness: int = 64,
@@ -364,8 +347,7 @@ def dither_section_ordered(img: np.ndarray, section: int, randomness: int = 64,
             pix = []
             for p in range(4):
                 x = bp * 4 + p
-                pr, pg, pb = preprocess_pixel(
-                    int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2]))
+                pr, pg, pb = int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2])
                 if randomness:
                     rnd = random.randint(0, 255) - 128
                     pr = max(0, min(255, pr + (rnd * r_rand) // 256))
@@ -395,8 +377,7 @@ def dither_section_bn(img: np.ndarray, section: int,
             pix = []
             for p in range(4):
                 x = bp * 4 + p
-                pr, pg, pb = preprocess_pixel(
-                    int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2]))
+                pr, pg, pb = int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2])
                 col = blue_noise_dither_2(x, y, pr, pg, pb, mixno=mixno)
                 pix.append(col)
             quads.append(tuple(pix))
@@ -429,11 +410,10 @@ def dither_section_fs(img: np.ndarray, section: int, err: np.ndarray,
         pix_row = [0] * SCREEN_W
         next_err = np.zeros((3, SCREEN_W), dtype=float)
         for x in xs:
-            raw_r, raw_g, raw_b = int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2])
-            pr, pg, pb = preprocess_pixel(raw_r, raw_g, raw_b)
+            pr, pg, pb = int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2])
             # Don't let dither error corrupt true-black border pixels
             # (letterbox/pillarbox padding added by fit resize).
-            if raw_r == 0 and raw_g == 0 and raw_b == 0:
+            if pr == 0 and pg == 0 and pb == 0:
                 err[0, x] = err[1, x] = err[2, x] = 0.0
             this_r = max(0, min(255, pr + int(err[0, x])))
             this_g = max(0, min(255, pg + int(err[1, x])))
@@ -1199,9 +1179,8 @@ def _initial_palette_from_image(arr: np.ndarray) -> list:
     counts = Counter()
     for y in range(arr.shape[0]):
         for x in range(arr.shape[1]):
-            pr, pg, pb = preprocess_pixel(
-                int(arr[y, x, 0]), int(arr[y, x, 1]), int(arr[y, x, 2]))
-            counts[closest_colour(pr, pg, pb)] += 1
+            counts[closest_colour(
+                int(arr[y, x, 0]), int(arr[y, x, 1]), int(arr[y, x, 2]))] += 1
 
     # All 8 colours ranked by frequency; fill any absent colours at the end
     ranked = [c for c, _ in counts.most_common()]
@@ -1330,7 +1309,7 @@ def process_image(png_path: str, output_path: str,
         if verbose:
             print("Applied auto-levels")
 
-    # Prep 5: input gamma (applied on top of internal INV_GAMMA scoring)
+    # Prep 5: input gamma
     if input_gamma != 1.0:
         exp = 1.0 / input_gamma
         lut = [int(min(255, max(0, (i / 255.0) ** exp * 255.0 + 0.5)))
@@ -1605,8 +1584,7 @@ The output binary is compatible with showimage.s for playback on BBC Master.
     ap.add_argument('--input-gamma', type=float, default=1.0, metavar='F',
                     help=('Prep 5: gamma curve applied to image pixels before '
                           'scoring (default 1.0 = none). Values > 1 brighten '
-                          'midtones; < 1 darken them. Separate from the '
-                          'internal INV_GAMMA=1.7 scoring curve.'))
+                          'midtones; < 1 darken them.'))
     ap.add_argument('--hue', type=float, default=0.0, metavar='DEG',
                     help=('Prep 6: hue rotation in degrees (default 0 = none). '
                           'Shifts all hues by DEG; useful when a dominant hue '

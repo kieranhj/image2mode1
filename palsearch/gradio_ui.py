@@ -382,8 +382,7 @@ def build_ui() -> gr.Blocks:
                             0.2, 3.0, value=1.0, step=0.05,
                             label="Input gamma",
                             info="Gamma applied to image pixels before scoring (1.0 = none). "
-                                 ">1 brightens midtones, <1 darkens. Separate from the "
-                                 "internal INV_GAMMA=1.7 scoring curve.")
+                                 ">1 brightens midtones, <1 darkens.")
 
                         hue = gr.Slider(
                             -180.0, 180.0, value=0.0, step=1.0,
