@@ -1,0 +1,4 @@
+gradio
+Pillow
+numpy
+z3-solver
