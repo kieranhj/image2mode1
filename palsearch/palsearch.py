@@ -312,6 +312,25 @@ def blue_noise_dither_2(x: int, y: int, r: int, g: int, b: int,
 
 # ── Dithering ─────────────────────────────────────────────────────────────────
 
+def dither_section_none(img: np.ndarray, section: int, chunk_size: int = 2):
+    """Nearest-colour quantisation with no dithering.
+
+    Each pixel is mapped to the closest BBC colour (0-7) independently.
+    Returns a list of (chunk_size × BYTES_PER_ROW) quads in screen order.
+    """
+    quads = []
+    for row in range(chunk_size):
+        y = section * chunk_size + row
+        for bp in range(BYTES_PER_ROW):
+            pix = []
+            for p in range(4):
+                x = bp * 4 + p
+                pix.append(closest_colour(
+                    int(img[y, x, 0]), int(img[y, x, 1]), int(img[y, x, 2])))
+            quads.append(tuple(pix))
+    return quads
+
+
 def dither_section_ordered(img: np.ndarray, section: int, randomness: int = 64,
                            chunk_size: int = 2, mixno: int = 0):
     """
@@ -484,10 +503,10 @@ def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
 
     previous_palette : the previous section's palette — defines the budget
                        reference (changes are counted from this).
-    smooth_penalty   : Option 10 — cost subtracted from gain per new slot change
-                       (in pixel-frequency units).  A positive value discourages
-                       gratuitous changes that cause inter-section banding.
-                       Values of 5-30 are typical; 0 = off (default).
+    smooth_penalty   : Option 10 — a new slot change must improve coverage by
+                       at least this percentage of total section pixels.
+                       Discourages gratuitous changes that cause inter-section
+                       banding.  Values of 1-5 are typical; 0 = off (default).
     init_palette     : optional override for the starting state of the palette
                        before hill-climbing begins.  Slots that already differ
                        from previous_palette consume part of the budget.  Used
@@ -512,6 +531,7 @@ def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
     budget = changes_per_row if has_budget else 16
 
     freq = {q: cnt for q, cnt in sorted_quads_with_counts}
+    total_pixels = sum(freq.values())
     required_set = set(freq)
     if not required_set:
         return palette, {}
@@ -579,12 +599,12 @@ def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
                         now = achievable_cnt[q] + d > 0
                         gain += freq[q] * ((1 if now else 0) - (1 if was else 0))
 
-                # Option 10: boundary smoothing — subtract a small cost for
-                # each NEW slot change (one not already in `changed`).
+                # Option 10: boundary smoothing — a new slot change must improve
+                # coverage by at least smooth_penalty% of total pixels.
                 # This discourages gratuitous changes that cause section banding.
                 if smooth_penalty > 0 and has_budget:
                     if slot not in changed and val != prev[slot]:
-                        gain -= smooth_penalty
+                        gain -= smooth_penalty * 0.01 * total_pixels
 
                 # 2-step look-ahead: credit quads that a follow-up step could
                 # unlock given this step is applied first.  Only activate when
@@ -939,8 +959,8 @@ def find_palette_for_section(sorted_quads, previous_palette,
                uses _beam_palette instead of _greedy_palette. Ignores restarts.
     anneal        : Option 2 SA step count (0 = off). When > 0, uses _anneal_palette.
                     Typical values: 100-500. Ignores restarts and beam.
-    smooth_penalty: Option 10 — per-new-slot-change cost in pixel-frequency units.
-                    Passed to _greedy_palette; values 5-30 reduce banding.
+    smooth_penalty: Option 10 — minimum coverage improvement (%) per new slot change.
+                    Passed to _greedy_palette; values 1-5 reduce banding.
 
     Both paths share Option C (early exit when palette is already sufficient)
     and Option B (numpy-vectorised best-effort for unmatched quads).
@@ -1427,7 +1447,10 @@ def process_image(png_path: str, output_path: str,
             section_dither = dither
 
         # ── Dither ────────────────────────────────────────────────────────────
-        if section_dither == 'ordered':
+        if section_dither == 'none':
+            quads = dither_section_none(arr, section,
+                                        chunk_size=chunk_size)
+        elif section_dither == 'ordered':
             quads = dither_section_ordered(arr, section,
                                            randomness=randomness,
                                            chunk_size=chunk_size,
@@ -1511,9 +1534,10 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                     help='Input PNG file (auto-resized to 320×256)')
     ap.add_argument('-o', '--output', default='output.bin',
                     help='Output binary file (default: output.bin)')
-    ap.add_argument('-d', '--dither', choices=['ordered', 'fs', 'bn', 'auto'],
+    ap.add_argument('-d', '--dither', choices=['none', 'ordered', 'fs', 'bn', 'auto'],
                     default='ordered',
                     help=('Dithering method: '
+                          'none = nearest colour (no dithering), '
                           'ordered = Bayer 2x2 (default), '
                           'fs = Floyd-Steinberg, '
                           'bn = blue-noise ordered dither (128x128 texture), '
@@ -1604,12 +1628,11 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                           'creating a flat-colour graphic-art look. '
                           'Higher N = more colours retained.'))
     ap.add_argument('--smooth', type=float, default=0.0, metavar='F',
-                    help=('Option 10: per-new-slot-change cost in pixel-frequency '
-                          'units (default 0 = off). Subtracted from the gain when '
-                          'the greedy considers changing a slot that has not been '
-                          'changed yet this section. Discourages gratuitous slot '
-                          'changes and reduces inter-section palette banding. '
-                          'Values of 5-30 are typical; start at 10.'))
+                    help=('Option 10: minimum coverage improvement (%% of section '
+                          'pixels) required per new slot change (default 0 = off). '
+                          'Discourages gratuitous slot changes and reduces '
+                          'inter-section palette banding. '
+                          'Values of 1-5 are typical; start at 2.'))
     ap.add_argument('--anneal', type=int, default=0, metavar='N',
                     help=('Option 2: simulated annealing step count (default 0 = off). '
                           'Replaces the greedy with SA: occasionally accepts '

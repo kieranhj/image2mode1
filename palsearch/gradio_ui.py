@@ -437,10 +437,11 @@ def build_ui() -> gr.Blocks:
                 with gr.Row():
                     with gr.Column():
                         dither = gr.Radio(
-                            choices=["ordered", "fs", "bn", "auto"],
+                            choices=["none", "ordered", "fs", "bn", "auto"],
                             value="ordered",
                             label="Dither method",
-                            info="ordered — Bayer 2×2 matrix; smooth gradients, fast, "
+                            info="none — nearest colour, no dithering; flat poster-art look.  "
+                                 "ordered — Bayer 2×2 matrix; smooth gradients, fast, "
                                  "visible pattern on flat regions.  "
                                  "fs — Floyd-Steinberg error diffusion; more detail but can "
                                  "produce noise on edges.  "
@@ -541,12 +542,13 @@ def build_ui() -> gr.Blocks:
                                  "Overrides beam and restarts when > 0.")
 
                         smooth = gr.Slider(
-                            0.0, 100.0, value=0.0, step=1.0,
-                            label="Boundary smoothing penalty",
-                            info="Cost subtracted from the greedy gain per new slot change "
-                                 "(pixel-frequency units; 0 = off). Raises the bar for "
-                                 "gratuitous palette changes, reducing visible horizontal "
-                                 "banding at section boundaries. Values 5–30 are typical.")
+                            0.0, 20.0, value=0.0, step=0.5,
+                            label="Boundary smoothing penalty (%)",
+                            info="A new palette slot change must improve coverage by at "
+                                 "least this percentage of total section pixels (0 = off). "
+                                 "Raises the bar for gratuitous palette changes, reducing "
+                                 "visible horizontal banding at section boundaries. "
+                                 "Values 1–5 are typical.")
 
             # ── Tab 4 — Output Options ─────────────────────────────────────────
 
