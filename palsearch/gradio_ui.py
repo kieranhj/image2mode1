@@ -317,18 +317,21 @@ def build_ui() -> gr.Blocks:
                         input_img = gr.Image(
                             label="Upload source image",
                             type="numpy", image_mode="RGB",
+                            format="png",
                             buttons=["fullscreen", "download"])
                     with gr.Column():
                         gr.Markdown("### 2 · Preprocessed (320×256, live)")
                         prep_img = gr.Image(
                             label="Updates on every Preprocessing control change",
                             type="pil",
+                            format="png",
                             buttons=["fullscreen", "download"])
             with gr.Column(scale=6):
                 gr.Markdown("### 3 · Converted (BBC Mode 1)")
                 conv_img = gr.Image(
                     label="Click Convert to generate",
                     type="pil",
+                    format="png",
                     buttons=["fullscreen", "download"])
                 convert_btn = gr.Button("Convert", variant="primary")
                 emu_link    = gr.HTML()
