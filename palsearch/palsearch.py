@@ -1448,9 +1448,14 @@ def process_image(png_path: str, output_path: str,
                   f"{chunk_size * BYTES_PER_ROW} bytes")
 
         # ── Solve ──────────────────────────────────────────────────────────────
+        # Disable look-ahead for section 0: the initial palette is seeded with
+        # dominant colours and every budget slot should go to direct gains —
+        # speculative two-step changes burn budget without guaranteed payoff,
+        # producing visible artefacts at the top of the image.
+        section_look_ahead = look_ahead and section > 0
         palette, matched, besteffort = find_palette_for_section(
             sorted_quads, previous_palette, verbose=verbose,
-            solver=solver, look_ahead=look_ahead,
+            solver=solver, look_ahead=section_look_ahead,
             changes_per_row=changes_per_row, restarts=restarts,
             beam=beam, anneal=anneal, smooth_penalty=smooth)
 
