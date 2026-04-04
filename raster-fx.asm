@@ -2,6 +2,7 @@
 \ *	RASTER FX FRAMEWORK
 \ ******************************************************************
 
+_MASTER_ONLY = 0
 CHUNK_SIZE=2
 
 \ ******************************************************************
@@ -48,8 +49,12 @@ IF n < 0
 ELIF n=0
 	; do nothing
 ELIF n=1
+	IF _MASTER_ONLY
 	EQUB $33
 	PRINT "1 cycle NOP is Master only and not emulated by b-em."
+	ELSE
+	ERROR "Requires a 1 cycle NOP which is not available."
+	ENDIF
 ELIF (n AND 1) = 0
 	FOR i,1,n/2,1
 	NOP
@@ -173,15 +178,15 @@ GUARD screen_addr			; ensure code size doesn't hit start of screen memory
 	LDA #1
 	JSR oswrch
 
-	\\ Turn off cursor
-
-	LDA #10: STA &FE00
-	LDA #32: STA &FE01
+	\\ Turn off cursor and interlace.
+	JSR fx_kill_function
 
 	;lda #2:sta &fe00
 	;lda #95:sta &fe01
 
 	\\ Initialise system modules here!
+	.call_init
+	JSR fx_init_function
 
 	\ ******************************************************************
 	\ *	DEMO START - from here on out there are no interrupts enabled!!
@@ -239,9 +244,6 @@ GUARD screen_addr			; ensure code size doesn't hit start of screen memory
 	LDA #HI(FramePeriod):STA &FE47
 
 	\\ Initialise FX modules here
-
-	.call_init
-	JSR fx_init_function
 
 	\\ We don't know how long the init took so resync to timer 1
 
@@ -380,7 +382,12 @@ GUARD screen_addr			; ensure code size doesn't hit start of screen memory
 	DEX					; 2c
 	BEQ done			; 2/3c
 
+	IF _MASTER_ONLY
 	WAIT_CYCLES 121
+	ELSE
+	WAIT_CYCLES 114
+	WAIT_CYCLES 7
+	ENDIF
 
 	JMP loop			; 3c
 
@@ -497,19 +504,19 @@ GUARD screen_addr			; ensure code size doesn't hit start of screen memory
     \\ Wait for hblank.
     \\ Write 9 palette entries.
 
-    WAIT_CYCLES 3
+    WAIT_CYCLES 5
 
     \\ Row loop.
     ldx #0                          ; 2c
 .loop
-    ; <== 5c
+    ; <== 7c
 
 IF CHUNK_SIZE==2
     jsr cycles_wait_128             ; 128c
 
-    ; <== 5c
+    ; <== 7c
     WAIT_CYCLES 7
-    ; <== 12c
+    ; <== 14c
 
     lda PALETTE_ADDR+256+2*128, X       ; 4c
     sta load2+1                         ; 4c
@@ -528,10 +535,10 @@ IF CHUNK_SIZE==2
     lda PALETTE_ADDR+256+0*128, X       ; 4c
     ldy PALETTE_ADDR+256+1*128, X       ; 4c
   
-    ; <== +16*4= 12+64c = 76c
+    ; <== +16*4= 14+64c = 78c
 
     sta &FE21                       ; 4c
-    ; <== LAND THIS WRITE ON 80c
+    ; <== LAND THIS WRITE ON 82c
     sty &FE21                       ; 4c
     .load2
     lda #0                          ; 2c
@@ -555,19 +562,19 @@ IF CHUNK_SIZE==2
     lda #0                          ; 2c
     sta &FE21                       ; 4c
 
-    ; <== +46 = 126c
+    ; <== +46 = 128c
 
     inx                             ; 2c
 
-    ; 128c = 0c
+    ; 130c = 2c
 
     cpx #128                      ; 2c
     bne loop                        ; 3c
 
 ELSE
-    ; <== 5c
+    ; <== 7c
     WAIT_CYCLES 7
-    ; <== 12c
+    ; <== 14c
 
 	; Streams at PALETTE_ADDR+256+N*256: LO=0, so LDA abs,X never crosses a page.
 
@@ -588,10 +595,10 @@ ELSE
     lda PALETTE_ADDR+256+0*256, X       ; 4c
     ldy PALETTE_ADDR+256+1*256, X       ; 4c
   
-    ; <== +16*4= 12+64c = 76c
+    ; <== +16*4= 14+64c = 78c
 
     sta &FE21                       ; 4c
-    ; <== LAND THIS WRITE ON 80c
+    ; <== LAND THIS WRITE ON 82c
     sty &FE21                       ; 4c
     .load2
     lda #0                          ; 2c
@@ -615,11 +622,11 @@ ELSE
     lda #0                          ; 2c
     sta &FE21                       ; 4c
 
-    ; <== +46 = 126c
+    ; <== +46 = 128c
 
     inx                             ; 2c
 
-    ; 128c = 0c
+    ; 130c = 2c
 
     cpx #0                          ; 2c
     bne loop                        ; 3c

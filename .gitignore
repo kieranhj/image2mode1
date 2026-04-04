@@ -5,3 +5,6 @@ __pycache__/
 !raster-fx.ssd
 .vscode/tasks.json
 compile.txt
+.claude/settings.local.json
+progress.md
+compile.txt
