@@ -3,3 +3,5 @@ __pycache__/
 *.bin
 *.ssd
 !raster-fx.ssd
+.vscode/tasks.json
+compile.txt
