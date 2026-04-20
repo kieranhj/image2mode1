@@ -187,4 +187,4 @@ Separates the palette and screen data for use with alternative loaders.
 
 ## Author
 
-Kieran Connell
+Kieran Connell based on an original algorithm by Julian Brown (aka Puppeh of CRTC) created for his amazing BBC Micro demo [Some Nasty Effects](https://github.com/crtc-demos/some-nasty-effects).
