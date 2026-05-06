@@ -9,6 +9,8 @@ Converts images to BBC Master Mode 1 screen data with per-scanline palette chang
 1. **Python image converter** (`palsearch/`) — takes a PNG/JPG, preprocesses it, solves for optimal BBC palette assignments per 2-scanline section, dithers to BBC colours, and outputs a `.bin` file (palette + screen data).
 2. **6502 assembly display engine** (`raster-fx.asm`) — runs on BBC Master hardware to render the image with raster-timed palette swaps each scanline.
 
+> **Critical sync constraint:** `CHUNK_SIZE` and `CHANGE_PER_ROW` (the per-section palette change budget) must match between `palsearch/palsearch.py` and `raster-fx.asm`. A mismatch silently produces garbled output — there is no runtime check.
+
 ## Build Commands
 
 ### Assemble the 6502 display engine
@@ -26,8 +28,9 @@ Opens at http://localhost:7860. The UI provides live preprocessing preview and f
 
 ### CLI conversion
 ```
-python palsearch/palsearch.py input.png -o output.bin [-d ordered|fs|bn|auto] [-q]
+python palsearch/palsearch.py input.png -o output.bin [-d ordered|fs|bn|auto|none] [-s greedy|z3] [-q]
 ```
+See `README.md` for the full flag reference (preprocessing, solver tuning, resize modes).
 
 ### Preview a .bin file
 ```
@@ -59,7 +62,8 @@ python bin/split_bin.py input.bin pal.bin pic.bin --split 1168
 - **greedy** (default) — fast hill-climbing with optional beam search, random restarts, simulated annealing, look-ahead
 - **z3** — exact SMT solver (requires `pip install z3-solver`)
 
-### Gradio UI (`palsearch/gradio_ui.py`)
+### Gradio UI
+- `app.py` is the entrypoint; UI implementation lives in `palsearch/gradio_ui.py`
 - Preprocessing controls update a live preview (no solver run)
 - "Convert" button runs `process_image()` from palsearch.py
 - Can patch the output into the SSD template and generate a jsbeeb emulator link
