@@ -147,6 +147,7 @@ def _convert(img_np,
              dither, randomness, mixno, chunk_size, auto_threshold,
              # Solver
              solver, changes, look_ahead, restarts, beam, anneal, smooth,
+             solve_order, target_bias,
              progress=gr.Progress(track_tqdm=False)):
 
     if img_np is None:
@@ -191,6 +192,8 @@ def _convert(img_np,
             hue               = float(hue),
             denoise           = denoise,
             posterise         = int(posterise),
+            solve_order       = solve_order,
+            target_bias       = float(target_bias),
             progress_callback = lambda v: progress(v, desc=f"Solving… {v*100:.0f}%"),
         )
         progress(1.0, desc="Done!")
@@ -550,6 +553,26 @@ def build_ui() -> gr.Blocks:
                                  "visible horizontal banding at section boundaries. "
                                  "Values 1–5 are typical.")
 
+                        solve_order = gr.Radio(
+                            choices=["forward", "reverse", "zigzag"],
+                            value="forward",
+                            label="Section solving order",
+                            info="forward — top-to-bottom (default). Top of image gets "
+                                 "full 16-change palette freedom; drift accumulates downward. "
+                                 "reverse — bottom-to-top. Bottom of image gets full "
+                                 "freedom instead. Try this if the bottom is more important. "
+                                 "zigzag — forward then reverse pass; reverse pass biases "
+                                 "toward forward result via target_bias. Damps drift in "
+                                 "both directions; ~2× solver runtime.")
+
+                        target_bias = gr.Slider(
+                            0.0, 0.20, value=0.05, step=0.01,
+                            label="Zigzag target bias (fraction of section pixels)",
+                            info="Strength of the reverse-pass bias toward forward-pass "
+                                 "choices (only affects zigzag). 0.05 = 5%% — small enough "
+                                 "to lose to genuine coverage gains, large enough to "
+                                 "break ties. Higher = stronger adherence to pass 1.")
+
             # ── Tab 4 — Output Options ─────────────────────────────────────────
 
         # ── Event wiring ──────────────────────────────────────────────────────
@@ -578,6 +601,7 @@ def build_ui() -> gr.Blocks:
             dither, randomness, mixno, chunk_size, auto_threshold,
             # solver
             solver, changes, look_ahead, restarts, beam, anneal, smooth,
+            solve_order, target_bias,
         ]
 
         emu_state = gr.State("")

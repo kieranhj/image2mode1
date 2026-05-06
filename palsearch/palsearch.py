@@ -493,7 +493,8 @@ _LOOK_AHEAD_FACTOR = 1.0  # weight of look-ahead gain relative to direct gain
 
 def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
                     look_ahead=False, changes_per_row=CHANGE_PER_ROW,
-                    init_palette=None, smooth_penalty=0.0):
+                    init_palette=None, smooth_penalty=0.0,
+                    target_palette=None, target_bias=0.0):
     """
     Option A: hill-climbing greedy palette solver replacing Z3.
 
@@ -512,6 +513,14 @@ def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
                        from previous_palette consume part of the budget.  Used
                        by random-restart to explore different local optima
                        without violating the inter-section change limit.
+    target_palette   : optional reference palette (e.g. from a prior solve pass).
+                       When set with target_bias > 0, candidate slot values that
+                       match target_palette[slot] receive a small scoring bonus.
+                       Used by zigzag solve order to bias the reverse pass toward
+                       the forward pass's choices, breaking ties without
+                       overriding genuine coverage gains.
+    target_bias      : bonus weight for matching target_palette, expressed as a
+                       fraction of total section pixels (e.g. 0.05 = 5%).
 
     Two-step look-ahead: for the top-K highest-frequency unmatched quads,
     checks whether any follow-up single-slot change (given this step applied)
@@ -605,6 +614,13 @@ def _greedy_palette(sorted_quads_with_counts, previous_palette=None,
                 if smooth_penalty > 0 and has_budget:
                     if slot not in changed and val != prev[slot]:
                         gain -= smooth_penalty * 0.01 * total_pixels
+
+                # Solve-order target bias: small bonus when the candidate value
+                # matches a previous-pass target palette.  Subordinate to direct
+                # coverage gain so it only affects ties or near-ties.
+                if target_palette is not None and target_bias > 0:
+                    if val == target_palette[slot]:
+                        gain += target_bias * total_pixels
 
                 # 2-step look-ahead: credit quads that a follow-up step could
                 # unlock given this step is applied first.  Only activate when
@@ -946,7 +962,8 @@ def _solve_palette_z3(required_quads, previous_palette=None,
 def find_palette_for_section(sorted_quads, previous_palette,
                               verbose=True, solver='greedy', look_ahead=False,
                               changes_per_row=CHANGE_PER_ROW, restarts=1,
-                              beam=1, anneal=0, smooth_penalty=0.0):
+                              beam=1, anneal=0, smooth_penalty=0.0,
+                              target_palette=None, target_bias=0.0):
     """
     Find a palette for this section.
 
@@ -1038,7 +1055,9 @@ def find_palette_for_section(sorted_quads, previous_palette,
                                    look_ahead=look_ahead,
                                    changes_per_row=changes_per_row,
                                    init_palette=start_pal if attempt > 0 else None,
-                                   smooth_penalty=smooth_penalty)
+                                   smooth_penalty=smooth_penalty,
+                                   target_palette=target_palette,
+                                   target_bias=target_bias)
             score = sum(freq.get(q, 0) for q in m)
             if score > best_score:
                 best_score = score
@@ -1269,6 +1288,7 @@ def process_image(png_path: str, output_path: str,
                   contrast: float = 1.0, brightness: float = 1.0,
                   input_gamma: float = 1.0, hue: float = 0.0,
                   denoise: bool = False, posterise: int = 0,
+                  solve_order: str = 'forward', target_bias: float = 0.05,
                   progress_callback=None):
     """
     Load a PNG, resize to 320×256, run the palsearch algorithm, and write
@@ -1431,25 +1451,19 @@ def process_image(png_path: str, output_path: str,
     # Preview buffer: RGB pixels at native 320×256
     preview_arr = np.zeros((SCREEN_H, SCREEN_W, 3), dtype=np.uint8) if preview_path else None
 
-    # ── Process sections sequentially ─────────────────────────────────────────
+    # ── Phase A: dither all sections in physical order ────────────────────────
+    # Dither is always run forward so FS error diffusion propagates correctly.
+    # Quads/sorted_quads are cached for re-use across solve passes (zigzag).
+    section_data = []
     for section in range(num_sections):
-        if verbose:
-            print(f"\nSection {section}/{num_sections - 1}:")
-            sys.stdout.flush()
-
-        # ── Option 9: adaptive dither mode selection ──────────────────────────
         if dither == 'auto':
             var = _section_variance(arr, section, chunk_size)
             section_dither = 'fs' if var > auto_threshold else 'ordered'
-            if verbose:
-                print(f"  Variance {var:.0f} → {section_dither}")
         else:
             section_dither = dither
 
-        # ── Dither ────────────────────────────────────────────────────────────
         if section_dither == 'none':
-            quads = dither_section_none(arr, section,
-                                        chunk_size=chunk_size)
+            quads = dither_section_none(arr, section, chunk_size=chunk_size)
         elif section_dither == 'ordered':
             quads = dither_section_ordered(arr, section,
                                            randomness=randomness,
@@ -1457,45 +1471,99 @@ def process_image(png_path: str, output_path: str,
                                            mixno=mixno)
         elif section_dither == 'bn':
             quads = dither_section_bn(arr, section,
-                                      chunk_size=chunk_size,
-                                      mixno=mixno)
+                                      chunk_size=chunk_size, mixno=mixno)
         else:
             quads = dither_section_fs(arr, section, fs_err,
                                       chunk_size=chunk_size)
 
         counts       = Counter(quads)
         sorted_quads = sorted(counts.items(), key=lambda x: -x[1])
+        section_data.append({
+            'quads': quads,
+            'sorted_quads': sorted_quads,
+            'dither_mode': section_dither,
+            'variance': _section_variance(arr, section, chunk_size)
+                        if dither == 'auto' else None,
+            # Filled in by solve pass(es):
+            'palette': None, 'matched': None, 'besteffort': None,
+        })
 
-        if verbose:
-            print(f"  {len(sorted_quads)} unique quads from "
-                  f"{chunk_size * BYTES_PER_ROW} bytes")
+    # ── Phase B: solve palette(s) — order depends on solve_order flag ─────────
+    initial_seed = previous_palette   # from _initial_palette_from_image above
 
-        # ── Solve ──────────────────────────────────────────────────────────────
-        # Disable look-ahead for section 0: the initial palette is seeded with
-        # dominant colours and every budget slot should go to direct gains —
-        # speculative two-step changes burn budget without guaranteed payoff,
-        # producing visible artefacts at the top of the image.
-        section_look_ahead = look_ahead and section > 0
-        palette, matched, besteffort = find_palette_for_section(
-            sorted_quads, previous_palette, verbose=verbose,
-            solver=solver, look_ahead=section_look_ahead,
-            changes_per_row=changes_per_row, restarts=restarts,
-            beam=beam, anneal=anneal, smooth_penalty=smooth)
+    def solve_pass(order, target_palettes, pass_label, pass_index, total_passes):
+        """Solve a single pass over sections in the given iteration order.
 
-        # ── Write screen bytes ─────────────────────────────────────────────────
+        order            : iterable of section indices (the first one is treated
+                           as the seeded boundary — gets full 16-change budget
+                           and look-ahead is suppressed there).
+        target_palettes  : optional dict {section: palette} to bias toward.
+        Writes the result into section_data[section]['palette' / 'matched' /
+        'besteffort'].
+        """
+        order = list(order)
+        first = order[0]
+        seed  = initial_seed
+        for i, section in enumerate(order):
+            if verbose:
+                print(f"\n[{pass_label}] Section {section}/{num_sections - 1}:")
+                sys.stdout.flush()
+                sd = section_data[section]
+                if sd['variance'] is not None:
+                    print(f"  Variance {sd['variance']:.0f} "
+                          f"→ {sd['dither_mode']}")
+                print(f"  {len(sd['sorted_quads'])} unique quads from "
+                      f"{chunk_size * BYTES_PER_ROW} bytes")
+
+            section_look_ahead = look_ahead and section != first
+            target = target_palettes.get(section) if target_palettes else None
+
+            palette, matched, besteffort = find_palette_for_section(
+                section_data[section]['sorted_quads'], seed, verbose=verbose,
+                solver=solver, look_ahead=section_look_ahead,
+                changes_per_row=changes_per_row, restarts=restarts,
+                beam=beam, anneal=anneal, smooth_penalty=smooth,
+                target_palette=target, target_bias=target_bias)
+
+            section_data[section]['palette']    = palette
+            section_data[section]['matched']    = matched
+            section_data[section]['besteffort'] = besteffort
+            seed = list(palette)
+
+            if progress_callback:
+                frac = (pass_index + (i + 1) / len(order)) / total_passes
+                progress_callback(frac)
+
+    if solve_order == 'forward':
+        solve_pass(range(num_sections), None, 'forward', 0, 1)
+    elif solve_order == 'reverse':
+        solve_pass(range(num_sections - 1, -1, -1), None, 'reverse', 0, 1)
+    elif solve_order == 'zigzag':
+        solve_pass(range(num_sections), None, 'pass1-forward', 0, 2)
+        pass1_palettes = {s: section_data[s]['palette']
+                          for s in range(num_sections)}
+        solve_pass(range(num_sections - 1, -1, -1), pass1_palettes,
+                   'pass2-reverse', 1, 2)
+    else:
+        raise ValueError(f"Unknown solve_order: {solve_order!r} "
+                         "(expected forward / reverse / zigzag)")
+
+    # ── Phase C: write screen bytes & palette deltas in physical order ────────
+    previous_palette = initial_seed
+    for section in range(num_sections):
+        sd = section_data[section]
+        palette    = sd['palette']
+        matched    = sd['matched']
+        besteffort = sd['besteffort']
+        quads      = sd['quads']
+
         byte_list = [matched.get(quad, besteffort.get(quad, 0))
                      for quad in quads]
         _write_screen_section(screen_bytes, section, byte_list,
                               chunk_size, palette, preview_arr)
-
-        # ── Write palette data ─────────────────────────────────────────────────
         _write_palette_delta(output_palettes, section, palette, previous_palette,
                              changes_per_row, num_sections, verbose)
-
         previous_palette = list(palette)
-
-        if progress_callback:
-            progress_callback((section + 1) / num_sections)
 
     # ── Write output file ──────────────────────────────────────────────────────
     with open(output_path, 'wb') as f:
@@ -1652,6 +1720,22 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                           f'(default {_AUTO_DITHER_THRESHOLD}). Sections with '
                           'per-pixel variance above this use Floyd-Steinberg; '
                           'sections below use ordered dither.'))
+    ap.add_argument('--solve-order',
+                    choices=['forward', 'reverse', 'zigzag'],
+                    default='forward',
+                    help=('Section solving order (default: forward = '
+                          'top-to-bottom, current behaviour). '
+                          'reverse = bottom-to-top (gives the bottom of the '
+                          'image full 16-change freedom rather than the top). '
+                          'zigzag = forward pass then reverse pass with the '
+                          'forward result as a target bias — damps drift in '
+                          'both directions, ~2x solver runtime.'))
+    ap.add_argument('--target-bias', type=float, default=0.05, metavar='F',
+                    help=('Strength of the zigzag-pass target bias as a '
+                          'fraction of total section pixels (default 0.05 = '
+                          '5%%). Only affects --solve-order zigzag. Higher = '
+                          'reverse pass adheres more strongly to forward-pass '
+                          'choices; lower = reverse pass freer to re-optimise.'))
     ap.add_argument('-q', '--quiet', action='store_true',
                     help='Suppress per-section progress output')
     args = ap.parse_args()
@@ -1677,7 +1761,9 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                   input_gamma=args.input_gamma,
                   hue=args.hue,
                   denoise=args.denoise,
-                  posterise=args.posterise)
+                  posterise=args.posterise,
+                  solve_order=args.solve_order,
+                  target_bias=args.target_bias)
 
 
 if __name__ == '__main__':
