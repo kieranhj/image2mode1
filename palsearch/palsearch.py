@@ -1230,6 +1230,50 @@ def _initial_palette_from_image(arr: np.ndarray) -> list:
     return [ranked[i % 8] for i in range(16)]
 
 
+def _quantise_to_bbc(arr: np.ndarray) -> np.ndarray:
+    """Vectorised closest_colour over an HxWx3 RGB image; returns HxW int8 of BBC colour 0-7."""
+    r_bit = (arr[:, :, 0] >= 128).astype(np.uint8)
+    g_bit = (arr[:, :, 1] >= 128).astype(np.uint8)
+    b_bit = (arr[:, :, 2] >= 128).astype(np.uint8)
+    return r_bit | (g_bit << 1) | (b_bit << 2)
+
+
+def _palette_from_counts(counts: np.ndarray) -> list:
+    """Build a 16-slot palette by ranking the 8 BBC colours by count, replicating across slots."""
+    ranked = list(np.argsort(-counts, kind='stable'))   # most frequent first; ties stable
+    return [int(ranked[i % 8]) for i in range(16)]
+
+
+def _compute_regional_palettes(arr: np.ndarray, num_sections: int,
+                                chunk_size: int, num_bands: int = 16) -> dict:
+    """
+    Compute a per-section initial palette by dividing the image into
+    `num_bands` vertical bands and ranking BBC-colour frequencies within each
+    band.  Each section is mapped to whichever band contains its scanlines.
+
+    Returns {section: 16-entry palette}.
+
+    With num_sections=128 and num_bands=16, each band covers 8 sections
+    (16 scanlines).  Bands are non-overlapping; sections at a band boundary
+    map to the band containing their first scanline.
+    """
+    cc = _quantise_to_bbc(arr)   # HxW int array of BBC colour 0-7
+    sections_per_band = max(1, num_sections // num_bands)
+    actual_bands = (num_sections + sections_per_band - 1) // sections_per_band
+
+    band_palettes = []
+    for b in range(actual_bands):
+        s0 = b * sections_per_band
+        s1 = min((b + 1) * sections_per_band, num_sections)
+        y0 = s0 * chunk_size
+        y1 = s1 * chunk_size
+        counts = np.bincount(cc[y0:y1].ravel(), minlength=8)
+        band_palettes.append(_palette_from_counts(counts))
+
+    return {s: band_palettes[min(s // sections_per_band, actual_bands - 1)]
+            for s in range(num_sections)}
+
+
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def _write_palette_delta(output_palettes, section, palette, previous_palette,
@@ -1289,6 +1333,7 @@ def process_image(png_path: str, output_path: str,
                   input_gamma: float = 1.0, hue: float = 0.0,
                   denoise: bool = False, posterise: int = 0,
                   solve_order: str = 'forward', target_bias: float = 0.05,
+                  seed_mode: str = 'global', seed_bands: int = 16,
                   progress_callback=None):
     """
     Load a PNG, resize to 320×256, run the palsearch algorithm, and write
@@ -1489,21 +1534,37 @@ def process_image(png_path: str, output_path: str,
         })
 
     # ── Phase B: solve palette(s) — order depends on solve_order flag ─────────
-    initial_seed = previous_palette   # from _initial_palette_from_image above
+    global_initial_seed = previous_palette   # from _initial_palette_from_image above
 
-    def solve_pass(order, target_palettes, pass_label, pass_index, total_passes):
+    if seed_mode == 'regional':
+        regional_palettes = _compute_regional_palettes(
+            arr, num_sections, chunk_size, num_bands=seed_bands)
+        if verbose:
+            print(f"\nRegional seeding enabled: {seed_bands} vertical bands "
+                  f"(~{num_sections // seed_bands} sections per band)")
+    elif seed_mode == 'global':
+        regional_palettes = None
+    else:
+        raise ValueError(f"Unknown seed_mode: {seed_mode!r} "
+                         "(expected global / regional)")
+
+    def solve_pass(order, target_palettes, seed_for_first,
+                   pass_label, pass_index, total_passes):
         """Solve a single pass over sections in the given iteration order.
 
         order            : iterable of section indices (the first one is treated
                            as the seeded boundary — gets full 16-change budget
                            and look-ahead is suppressed there).
         target_palettes  : optional dict {section: palette} to bias toward.
+        seed_for_first   : palette used as previous_palette for the first
+                           section in `order` (subsequent sections use the
+                           prior section's solved palette).
         Writes the result into section_data[section]['palette' / 'matched' /
         'besteffort'].
         """
         order = list(order)
         first = order[0]
-        seed  = initial_seed
+        seed  = seed_for_first
         for i, section in enumerate(order):
             if verbose:
                 print(f"\n[{pass_label}] Section {section}/{num_sections - 1}:")
@@ -1534,22 +1595,33 @@ def process_image(png_path: str, output_path: str,
                 frac = (pass_index + (i + 1) / len(order)) / total_passes
                 progress_callback(frac)
 
+    # First-section seeds depend on solve order: forward starts at section 0,
+    # reverse / zigzag-pass-2 start at section N-1.  In regional mode, each
+    # uses its band's palette; otherwise both fall back to the global seed.
+    fwd_seed = (regional_palettes[0] if regional_palettes
+                else global_initial_seed)
+    rev_seed = (regional_palettes[num_sections - 1] if regional_palettes
+                else global_initial_seed)
+
     if solve_order == 'forward':
-        solve_pass(range(num_sections), None, 'forward', 0, 1)
+        solve_pass(range(num_sections), regional_palettes, fwd_seed,
+                   'forward', 0, 1)
     elif solve_order == 'reverse':
-        solve_pass(range(num_sections - 1, -1, -1), None, 'reverse', 0, 1)
+        solve_pass(range(num_sections - 1, -1, -1), regional_palettes, rev_seed,
+                   'reverse', 0, 1)
     elif solve_order == 'zigzag':
-        solve_pass(range(num_sections), None, 'pass1-forward', 0, 2)
+        solve_pass(range(num_sections), regional_palettes, fwd_seed,
+                   'pass1-forward', 0, 2)
         pass1_palettes = {s: section_data[s]['palette']
                           for s in range(num_sections)}
-        solve_pass(range(num_sections - 1, -1, -1), pass1_palettes,
+        solve_pass(range(num_sections - 1, -1, -1), pass1_palettes, rev_seed,
                    'pass2-reverse', 1, 2)
     else:
         raise ValueError(f"Unknown solve_order: {solve_order!r} "
                          "(expected forward / reverse / zigzag)")
 
     # ── Phase C: write screen bytes & palette deltas in physical order ────────
-    previous_palette = initial_seed
+    previous_palette = global_initial_seed
     for section in range(num_sections):
         sd = section_data[section]
         palette    = sd['palette']
@@ -1731,11 +1803,32 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                           'forward result as a target bias — damps drift in '
                           'both directions, ~2x solver runtime.'))
     ap.add_argument('--target-bias', type=float, default=0.05, metavar='F',
-                    help=('Strength of the zigzag-pass target bias as a '
-                          'fraction of total section pixels (default 0.05 = '
-                          '5%%). Only affects --solve-order zigzag. Higher = '
-                          'reverse pass adheres more strongly to forward-pass '
-                          'choices; lower = reverse pass freer to re-optimise.'))
+                    help=('Strength of the target-palette bias as a fraction '
+                          'of total section pixels (default 0.05 = 5%%). '
+                          'Affects --solve-order zigzag (pass-2 toward pass-1) '
+                          'and --seed-mode regional (every section toward its '
+                          "regional dominant palette). Higher = stronger "
+                          'adherence to the target; lower = solver freer to '
+                          're-optimise based on coverage.'))
+    ap.add_argument('--seed-mode', choices=['global', 'regional'],
+                    default='global',
+                    help=('Initial-palette seeding strategy. '
+                          'global (default) = one dominant-colour palette '
+                          'derived from the entire image, used as section 0\'s '
+                          "seed only. "
+                          'regional = a separate dominant-colour palette per '
+                          'vertical band (see --seed-bands), used as a target '
+                          'bias for every section in the first solve pass. '
+                          'Helps images with strong vertical colour variation '
+                          '(e.g. sky-over-ground landscapes) by giving each '
+                          'section a locally-relevant starting bias.'))
+    ap.add_argument('--seed-bands', type=int, default=16, metavar='N',
+                    help=('Number of vertical bands for --seed-mode regional '
+                          '(default 16). With the default 128 sections, '
+                          '16 bands = 8 sections per band = 16 scanlines per '
+                          'band. Higher = finer regional tracking but noisier '
+                          'palettes in homogeneous regions; lower = smoother '
+                          'transitions but less local specificity.'))
     ap.add_argument('-q', '--quiet', action='store_true',
                     help='Suppress per-section progress output')
     args = ap.parse_args()
@@ -1763,7 +1856,9 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                   denoise=args.denoise,
                   posterise=args.posterise,
                   solve_order=args.solve_order,
-                  target_bias=args.target_bias)
+                  target_bias=args.target_bias,
+                  seed_mode=args.seed_mode,
+                  seed_bands=args.seed_bands)
 
 
 if __name__ == '__main__':

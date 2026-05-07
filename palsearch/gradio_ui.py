@@ -147,7 +147,7 @@ def _convert(img_np,
              dither, randomness, mixno, chunk_size, auto_threshold,
              # Solver
              solver, changes, look_ahead, restarts, beam, anneal, smooth,
-             solve_order, target_bias,
+             solve_order, target_bias, seed_mode, seed_bands,
              progress=gr.Progress(track_tqdm=False)):
 
     if img_np is None:
@@ -194,6 +194,8 @@ def _convert(img_np,
             posterise         = int(posterise),
             solve_order       = solve_order,
             target_bias       = float(target_bias),
+            seed_mode         = seed_mode,
+            seed_bands        = int(seed_bands),
             progress_callback = lambda v: progress(v, desc=f"Solving… {v*100:.0f}%"),
         )
         progress(1.0, desc="Done!")
@@ -488,90 +490,106 @@ def build_ui() -> gr.Blocks:
             # ── Tab 3 — Palette Solver ─────────────────────────────────────────
             with gr.Tab("Palette Solver"):
                 gr.Markdown(
-                    "The solver chooses which 9 BBC palette entries to change each "
-                    "scanline to maximise coverage of the dithered colours. "
-                    "The default greedy solver is fast (~0.5 s); "
-                    "higher-quality options trade runtime for coverage.")
+                    "The solver chooses which palette entries to change each "
+                    "section to maximise coverage of the dithered colours.")
 
                 with gr.Row():
-                    with gr.Column():
-                        solver = gr.Radio(
-                            choices=["greedy", "z3"],
-                            value="greedy",
-                            label="Solver",
-                            info="greedy — fast hill-climbing (default, < 1 s per image). "
-                                 "z3 — exact SMT solver; slower but finds the optimal palette. "
-                                 "Requires: pip install z3-solver")
+                    solver = gr.Radio(
+                        choices=["greedy", "z3"],
+                        value="greedy",
+                        label="Solver",
+                        info="greedy — fast hill-climbing (default, < 1 s). "
+                             "z3 — exact SMT solver, optimal but slower. "
+                             "Requires: pip install z3-solver")
 
-                        changes = gr.Slider(
-                            1, 16, value=CHANGE_PER_ROW, step=1,
-                            label="Max palette changes per section",
-                            info="Maximum palette slot changes allowed between sections "
-                                 f"(default {CHANGE_PER_ROW}). Higher = more colour variety "
-                                 "but uses more 6502 cycles; must match the 6502 raster code.")
+                    changes = gr.Slider(
+                        1, 16, value=CHANGE_PER_ROW, step=1,
+                        label="Max palette changes per section",
+                        info=f"Default {CHANGE_PER_ROW}. Must match the 6502 "
+                             "raster code; higher needs more cycles per hblank.")
 
-                        look_ahead = gr.Checkbox(
-                            value=False, label="2-step look-ahead",
-                            info="Before committing to a palette change, check whether a "
-                                 "follow-up change could unlock an additional colour. "
-                                 "Only activates when direct gain is zero, preventing "
-                                 "speculative bad choices. Helps colours needing two "
-                                 "coordinated slots (e.g. white).")
+                with gr.Accordion("Advanced", open=False):
+                    gr.Markdown(
+                        "Quality / speed trade-offs and experimental solver "
+                        "strategies. Defaults give good results — these "
+                        "controls are for fine-tuning specific images.")
 
-                        restarts = gr.Slider(
-                            1, 20, value=1, step=1,
-                            label="Random restarts",
-                            info="Run the greedy N times per section, each from a randomly "
-                                 "perturbed starting palette. Keep the best result. "
-                                 "5–20 trades runtime for quality; budget is always counted "
-                                 "from the real previous palette.")
+                    gr.Markdown("**Solver tuning**")
+                    with gr.Row():
+                        with gr.Column():
+                            look_ahead = gr.Checkbox(
+                                value=False, label="2-step look-ahead",
+                                info="Check whether a follow-up change could unlock an "
+                                     "additional colour. Only activates when direct gain "
+                                     "is zero. Helps colours needing two coordinated slots.")
 
-                    with gr.Column():
-                        beam = gr.Slider(
-                            1, 20, value=1, step=1,
-                            label="Beam search width (1 = greedy)",
-                            info="Keep the top-N palette candidates at each solver step "
-                                 "instead of committing to one (beam search). "
-                                 "Values 5–10 greatly reduce the chance of committing to a "
-                                 "globally bad early choice, at N× the solver cost.")
+                            restarts = gr.Slider(
+                                1, 20, value=1, step=1,
+                                label="Random restarts",
+                                info="Run the greedy N times per section from perturbed "
+                                     "starting palettes; keep the best. 5–20 trades "
+                                     "runtime for quality.")
 
-                        anneal = gr.Slider(
-                            0, 500, value=0, step=10,
-                            label="Simulated annealing steps (0 = off)",
-                            info="Replace the greedy with simulated annealing. Occasionally "
-                                 "accepts palette changes that reduce coverage early on, "
-                                 "allowing escape from local optima. Temperature cools "
-                                 "exponentially over the step budget. 100–300 is typical. "
-                                 "Overrides beam and restarts when > 0.")
+                            smooth = gr.Slider(
+                                0.0, 20.0, value=0.0, step=0.5,
+                                label="Boundary smoothing penalty (%)",
+                                info="A new slot change must improve coverage by at least "
+                                     "this %% of section pixels. Reduces inter-section "
+                                     "banding. 1–5 typical; 0 = off.")
 
-                        smooth = gr.Slider(
-                            0.0, 20.0, value=0.0, step=0.5,
-                            label="Boundary smoothing penalty (%)",
-                            info="A new palette slot change must improve coverage by at "
-                                 "least this percentage of total section pixels (0 = off). "
-                                 "Raises the bar for gratuitous palette changes, reducing "
-                                 "visible horizontal banding at section boundaries. "
-                                 "Values 1–5 are typical.")
+                        with gr.Column():
+                            beam = gr.Slider(
+                                1, 20, value=1, step=1,
+                                label="Beam search width (1 = greedy)",
+                                info="Keep top-N palette candidates at each solver step "
+                                     "instead of committing to one. 5–10 reduces bad "
+                                     "early commits at N× cost.")
 
-                        solve_order = gr.Radio(
-                            choices=["forward", "reverse", "zigzag"],
-                            value="forward",
-                            label="Section solving order",
-                            info="forward — top-to-bottom (default). Top of image gets "
-                                 "full 16-change palette freedom; drift accumulates downward. "
-                                 "reverse — bottom-to-top. Bottom of image gets full "
-                                 "freedom instead. Try this if the bottom is more important. "
-                                 "zigzag — forward then reverse pass; reverse pass biases "
-                                 "toward forward result via target_bias. Damps drift in "
-                                 "both directions; ~2× solver runtime.")
+                            anneal = gr.Slider(
+                                0, 500, value=0, step=10,
+                                label="Simulated annealing steps (0 = off)",
+                                info="Replace greedy with SA: occasionally accepts "
+                                     "downhill moves to escape local optima. "
+                                     "100–300 typical. Overrides beam and restarts.")
 
-                        target_bias = gr.Slider(
-                            0.0, 0.20, value=0.05, step=0.01,
-                            label="Zigzag target bias (fraction of section pixels)",
-                            info="Strength of the reverse-pass bias toward forward-pass "
-                                 "choices (only affects zigzag). 0.05 = 5%% — small enough "
-                                 "to lose to genuine coverage gains, large enough to "
-                                 "break ties. Higher = stronger adherence to pass 1.")
+                    gr.Markdown("**Solving order & seeding**")
+                    with gr.Row():
+                        with gr.Column():
+                            solve_order = gr.Radio(
+                                choices=["forward", "reverse", "zigzag"],
+                                value="forward",
+                                label="Section solving order",
+                                info="forward — top-to-bottom (default). "
+                                     "reverse — bottom-to-top, useful if the bottom of "
+                                     "the image is more important. "
+                                     "zigzag — forward then reverse, ~2× runtime.")
+
+                            seed_mode = gr.Radio(
+                                choices=["global", "regional"],
+                                value="global",
+                                label="Initial palette seeding",
+                                info="global — one dominant-colour palette for the whole "
+                                     "image. regional — one palette per vertical band "
+                                     "(see Bands). Helps images with strong vertical "
+                                     "colour variation.")
+
+                        with gr.Column():
+                            target_bias = gr.Slider(
+                                0.0, 0.20, value=0.05, step=0.01,
+                                label="Target bias",
+                                info="Strength of the target-palette bias for zigzag "
+                                     "(reverse pass → forward) and regional seeding. "
+                                     "0.05 = 5%% of section pixels — large enough to "
+                                     "break ties, small enough to lose to real gains.")
+
+                            seed_bands = gr.Slider(
+                                2, 64, value=16, step=1,
+                                label="Regional bands",
+                                info="Vertical bands for regional seeding (only used "
+                                     "when seeding = regional). With 128 sections, "
+                                     "16 bands = 8 sections per band. Higher = finer "
+                                     "local tracking but noisier palettes; lower = "
+                                     "smoother transitions but less specificity.")
 
             # ── Tab 4 — Output Options ─────────────────────────────────────────
 
@@ -601,7 +619,7 @@ def build_ui() -> gr.Blocks:
             dither, randomness, mixno, chunk_size, auto_threshold,
             # solver
             solver, changes, look_ahead, restarts, beam, anneal, smooth,
-            solve_order, target_bias,
+            solve_order, target_bias, seed_mode, seed_bands,
         ]
 
         emu_state = gr.State("")
