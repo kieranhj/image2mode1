@@ -425,13 +425,24 @@ def build_ui() -> gr.Blocks:
                         gr.Markdown("#### Layout")
 
                         resize = gr.Radio(
-                            choices=["fit", "crop-left", "crop-right",
+                            choices=["fit", "paste", "crop-left", "crop-right",
                                      "crop-top", "crop-bottom"],
                             value="fit",
                             label="Resize mode",
                             info="How to fit the source image to 320×256. "
-                                 "'fit' letterboxes or pillarboxes (black bars). "
+                                 "'fit' — letterbox or pillarbox with Lanczos resample. "
+                                 "'paste' — no scaling, centre 1:1 with black padding "
+                                 "(crisp pixels — for native pixel art like Spectrum 256×192). "
                                  "'crop-*' fills the screen and discards the excess edge.")
+
+                        spectrum_btn = gr.Button(
+                            "ZX Spectrum source preset",
+                            size="sm")
+                        gr.Markdown(
+                            "_Sets resize=paste, dither=none, and clears all "
+                            "preprocessing — for native Spectrum 256×192 sources "
+                            "that already use BBC RGB primaries and have no dither._",
+                            elem_classes=[])
 
             # ── Tab 2 — Dithering ──────────────────────────────────────────────
             with gr.Tab("Dithering"):
@@ -623,6 +634,26 @@ def build_ui() -> gr.Blocks:
         ]
 
         emu_state = gr.State("")
+
+        # Spectrum preset: set neutral preprocessing, paste resize, no dither
+        spectrum_btn.click(
+            fn=lambda: (
+                "paste",   # resize
+                False,     # autolevel
+                1.0,       # input_gamma
+                1.0,       # contrast
+                1.0,       # brightness
+                1.0,       # saturation
+                0.0,       # hue
+                False,     # denoise
+                0,         # posterise
+                0.0,       # sharpen
+                "none",    # dither
+            ),
+            inputs=[],
+            outputs=[resize, autolevel, input_gamma, contrast, brightness,
+                     saturation, hue, denoise, posterise, sharpen, dither],
+        )
 
         convert_btn.click(
             fn=_convert,

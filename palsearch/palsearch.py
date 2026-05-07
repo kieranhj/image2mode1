@@ -1163,6 +1163,10 @@ def _fit_image(img: Image.Image, mode: str) -> Image.Image:
     mode:
       'fit'          — scale to fit inside 320×256, preserve aspect ratio,
                        centre on a black canvas (letterbox / pillarbox).
+      'paste'        — no scaling. Centre the source 1:1 in 320×256, padding
+                       black; centre-crop if larger. Preserves exact pixel
+                       fidelity — intended for native pixel-art sources
+                       (e.g. Spectrum 256×192).
       'crop-left'    — scale so height == 256 (may make width > 320),
                        then discard the left-hand excess.
       'crop-right'   — same, discard the right-hand excess.
@@ -1171,6 +1175,22 @@ def _fit_image(img: Image.Image, mode: str) -> Image.Image:
       'crop-bottom'  — same, discard the bottom excess.
     """
     src_w, src_h = img.size
+
+    if mode == 'paste':
+        canvas = Image.new('RGB', (SCREEN_W, SCREEN_H), (0, 0, 0))
+        if src_w <= SCREEN_W and src_h <= SCREEN_H:
+            canvas.paste(img, ((SCREEN_W - src_w) // 2,
+                               (SCREEN_H - src_h) // 2))
+        else:
+            x0 = max(0, (src_w - SCREEN_W) // 2)
+            y0 = max(0, (src_h - SCREEN_H) // 2)
+            cropped = img.crop((x0, y0,
+                                x0 + min(src_w, SCREEN_W),
+                                y0 + min(src_h, SCREEN_H)))
+            canvas.paste(cropped,
+                         ((SCREEN_W - cropped.width) // 2,
+                          (SCREEN_H - cropped.height) // 2))
+        return canvas
 
     if mode == 'fit':
         scale  = min(SCREEN_W / src_w, SCREEN_H / src_h)
@@ -1686,11 +1706,15 @@ The output binary is compatible with showimage.s for playback on BBC Master.
     ap.add_argument('-p', '--preview',
                     help='Write a preview PNG of the converted image')
     ap.add_argument('-r', '--resize',
-                    choices=['fit', 'crop-left', 'crop-right',
+                    choices=['fit', 'paste', 'crop-left', 'crop-right',
                              'crop-top', 'crop-bottom'],
                     default='fit',
                     help=('How to fit the input to 320×256: '
-                          'fit = letterbox/pillarbox centred (default); '
+                          'fit = letterbox/pillarbox centred (default, '
+                          'preserves aspect via Lanczos resample); '
+                          'paste = no scaling, centre 1:1 with black padding '
+                          '(crisp pixels — for native pixel-art like '
+                          'Spectrum 256×192); '
                           'crop-left/right = fill height, crop excess width; '
                           'crop-top/bottom = fill width, crop excess height'))
     ap.add_argument('-s', '--solver', choices=['greedy', 'z3'], default='greedy',
@@ -1829,9 +1853,33 @@ The output binary is compatible with showimage.s for playback on BBC Master.
                           'band. Higher = finer regional tracking but noisier '
                           'palettes in homogeneous regions; lower = smoother '
                           'transitions but less local specificity.'))
+    ap.add_argument('--spectrum', action='store_true', default=False,
+                    help=('Convenience preset for ZX Spectrum source images. '
+                          'Sets resize=paste, dither=none, and disables all '
+                          'preprocessing (saturation/contrast/brightness/gamma'
+                          '/hue/denoise/posterise/sharpen/autolevel). '
+                          'Spectrum sources already use the BBC RGB primaries '
+                          '(modulo BRIGHT) and have no dither pattern, so '
+                          'preprocessing is wasted and resampling damages '
+                          'crisp pixels. Individual settings can still be '
+                          'overridden after --spectrum on the command line.'))
     ap.add_argument('-q', '--quiet', action='store_true',
                     help='Suppress per-section progress output')
     args = ap.parse_args()
+
+    # ── Spectrum preset: apply only to args still at their default values ────
+    # so explicit user flags after --spectrum win.
+    if args.spectrum:
+        defaults = ap.parse_args([args.input])   # parse with no other flags
+        spectrum_overrides = {
+            'resize': 'paste', 'dither': 'none',
+            'saturation': 1.0, 'contrast': 1.0, 'brightness': 1.0,
+            'input_gamma': 1.0, 'hue': 0.0, 'autolevel': False,
+            'denoise': False, 'posterise': 0, 'sharpen': 0.0,
+        }
+        for k, v in spectrum_overrides.items():
+            if getattr(args, k) == getattr(defaults, k):
+                setattr(args, k, v)
 
     process_image(args.input, args.output,
                   dither=args.dither, verbose=not args.quiet,
