@@ -32,339 +32,345 @@
      1919   20 EE FF   JSR &FFEE
      191C   A9 01      LDA #&01
      191E   20 EE FF   JSR &FFEE
-     1921   A9 0A      LDA #&0A
-     1923   8D 00 FE   STA &FE00
-     1926   A9 20      LDA #&20
-     1928   8D 01 FE   STA &FE01
-     192B   78         SEI
-     192C   A9 02      LDA #&02
+     1921   20 B5 1A   JSR &1AB5
+.call_init
+     1924   20 1D 1A   JSR &1A1D
+     1927   78         SEI
+     1928   A9 02      LDA #&02
 .vsync1
-     192E   2C 4D FE   BIT &FE4D
-     1931   F0 FB      BEQ &192E
+     192A   2C 4D FE   BIT &FE4D
+     192D   F0 FB      BEQ &192A
 .syncloop
-     1933   8D 4D FE   STA &FE4D
-     1936   A2 8E      LDX #&8E
+     192F   8D 4D FE   STA &FE4D
+     1932   A2 8E      LDX #&8E
 .deloop
-     1938   A0 37      LDY #&37
+     1934   A0 37      LDY #&37
 .innerloop
-     193A   88         DEY
-     193B   D0 FD      BNE &193A
-     193D   CA         DEX
-     193E   D0 F8      BNE &1938
+     1936   88         DEY
+     1937   D0 FD      BNE &1936
+     1939   CA         DEX
+     193A   D0 F8      BNE &1934
+     193C   EA         NOP
+     193D   EA         NOP
+     193E   EA         NOP
+     193F   EA         NOP
      1940   EA         NOP
      1941   EA         NOP
      1942   EA         NOP
      1943   EA         NOP
      1944   EA         NOP
-     1945   EA         NOP
-     1946   EA         NOP
-     1947   EA         NOP
-     1948   EA         NOP
-     1949   2C 4D FE   BIT &FE4D
-     194C   D0 E5      BNE &1933
+     1945   2C 4D FE   BIT &FE4D
+     1948   D0 E5      BNE &192F
 .set_timers
-     194E   A9 5F      LDA #&5F
-     1950   8D 44 FE   STA &FE44
-     1953   A2 07      LDX #&07
-     1955   8E 45 FE   STX &FE45
-     1958   A9 FE      LDA #&FE
-     195A   8D 46 FE   STA &FE46
-     195D   A9 4D      LDA #&4D
-     195F   8D 47 FE   STA &FE47
-.call_init
-     1962   20 21 1A   JSR &1A21
-     1965   A9 42      LDA #&42
-     1967   8D 4D FE   STA &FE4D
-     196A   A9 40      LDA #&40
+     194A   A9 5F      LDA #&5F
+     194C   8D 44 FE   STA &FE44
+     194F   A2 07      LDX #&07
+     1951   8E 45 FE   STX &FE45
+     1954   A9 FE      LDA #&FE
+     1956   8D 46 FE   STA &FE46
+     1959   A9 4D      LDA #&4D
+     195B   8D 47 FE   STA &FE47
+     195E   A9 42      LDA #&42
+     1960   8D 4D FE   STA &FE4D
+     1963   A9 40      LDA #&40
 .waitTimer1
-     196C   2C 4D FE   BIT &FE4D
-     196F   F0 FB      BEQ &196C
-     1971   8D 4D FE   STA &FE4D
-     1974   A2 FF      LDX #&FF
-     1976   20 DE 19   JSR &19DE
+     1965   2C 4D FE   BIT &FE4D
+     1968   F0 FB      BEQ &1965
+     196A   8D 4D FE   STA &FE4D
+     196D   A2 FF      LDX #&FF
+     196F   20 D7 19   JSR &19D7
 .main_loop
-     1979   E6 70      INC &70
-     197B   D0 02      BNE &197F
-     197D   E6 71      INC &71
+     1972   E6 70      INC &70
+     1974   D0 02      BNE &1978
+     1976   E6 71      INC &71
 .no_carry
-     197F   A9 79      LDA #&79
-     1981   A2 F0      LDX #&F0
-     1983   20 F4 FF   JSR &FFF4
-     1986   86 72      STX &72
+     1978   A9 79      LDA #&79
+     197A   A2 F0      LDX #&F0
+     197C   20 F4 FF   JSR &FFF4
+     197F   86 72      STX &72
 .call_update
-     1988   20 42 1A   JSR &1A42
-     198B   A9 40      LDA #&40
+     1981   20 3E 1A   JSR &1A3E
+     1984   A9 40      LDA #&40
 .waitTimer1
-     198D   2C 4D FE   BIT &FE4D
-     1990   F0 FB      BEQ &198D
-     1992   AD 44 FE   LDA &FE44
-     1995   29 0F      AND #&0F
-     1997   38         SEC
-     1998   E9 07      SBC #&07
-     199A   49 07      EOR #&07
-     199C   8D A0 19   STA &19A0
+     1986   2C 4D FE   BIT &FE4D
+     1989   F0 FB      BEQ &1986
+     198B   AD 44 FE   LDA &FE44
+     198E   29 0F      AND #&0F
+     1990   38         SEC
+     1991   E9 07      SBC #&07
+     1993   49 07      EOR #&07
+     1995   8D 99 19   STA &1999
 .branch
-     199F   D0 FE      BNE &199F
-     19A1   EA         NOP
-     19A2   EA         NOP
-     19A3   EA         NOP
-     19A4   EA         NOP
-     19A5   EA         NOP
-     19A6   EA         NOP
-     19A7   EA         NOP
+     1998   D0 FE      BNE &1998
+     199A   EA         NOP
+     199B   EA         NOP
+     199C   EA         NOP
+     199D   EA         NOP
+     199E   EA         NOP
+     199F   EA         NOP
+     19A0   EA         NOP
 .stable
-     19A8   24 00      BIT &00
-     19AA   A5 72      LDA &72
-     19AC   30 06      BMI &19B4
+     19A1   24 00      BIT &00
+     19A3   A5 72      LDA &72
+     19A5   30 06      BMI &19AD
 .call_draw
-     19AE   20 4E 1A   JSR &1A4E
-     19B1   4C 79 19   JMP &1979
+     19A7   20 4A 1A   JSR &1A4A
+     19AA   4C 72 19   JMP &1972
 .call_kill
-     19B4   20 B9 1A   JSR &1AB9
-     19B7   A9 D3      LDA #&D3
-     19B9   8D 4E FE   STA &FE4E
-     19BC   58         CLI
+     19AD   20 B5 1A   JSR &1AB5
+     19B0   A9 D3      LDA #&D3
+     19B2   8D 4E FE   STA &FE4E
+     19B5   58         CLI
 .return
-     19BD   60         RTS
+     19B6   60         RTS
 .cycles_wait_128
 Macro WAIT_CYCLES:
 WAIT116  CYCLES
-     19BE   20 BD 19   JSR &19BD
-     19C1   20 BD 19   JSR &19BD
-     19C4   20 BD 19   JSR &19BD
-     19C7   20 BD 19   JSR &19BD
-     19CA   20 BD 19   JSR &19BD
-     19CD   20 BD 19   JSR &19BD
-     19D0   20 BD 19   JSR &19BD
-     19D3   20 BD 19   JSR &19BD
-     19D6   20 BD 19   JSR &19BD
+     19B7   20 B6 19   JSR &19B6
+     19BA   20 B6 19   JSR &19B6
+     19BD   20 B6 19   JSR &19B6
+     19C0   20 B6 19   JSR &19B6
+     19C3   20 B6 19   JSR &19B6
+     19C6   20 B6 19   JSR &19B6
+     19C9   20 B6 19   JSR &19B6
+     19CC   20 B6 19   JSR &19B6
+     19CF   20 B6 19   JSR &19B6
 Macro WAIT_NOPS:
 WAIT8  CYCLES AS NOPS
-     19D9   EA         NOP
-     19DA   EA         NOP
-     19DB   EA         NOP
-     19DC   EA         NOP
+     19D2   EA         NOP
+     19D3   EA         NOP
+     19D4   EA         NOP
+     19D5   EA         NOP
 End macro WAIT_NOPS
 End macro WAIT_CYCLES
-     19DD   60         RTS
+     19D6   60         RTS
 .cycles_wait_scanlines
 Macro WAIT_CYCLES:
 WAIT111  CYCLES
-     19DE   20 BD 19   JSR &19BD
-     19E1   20 BD 19   JSR &19BD
-     19E4   20 BD 19   JSR &19BD
-     19E7   20 BD 19   JSR &19BD
-     19EA   20 BD 19   JSR &19BD
-     19ED   20 BD 19   JSR &19BD
-     19F0   20 BD 19   JSR &19BD
-     19F3   20 BD 19   JSR &19BD
-     19F6   20 BD 19   JSR &19BD
+     19D7   20 B6 19   JSR &19B6
+     19DA   20 B6 19   JSR &19B6
+     19DD   20 B6 19   JSR &19B6
+     19E0   20 B6 19   JSR &19B6
+     19E3   20 B6 19   JSR &19B6
+     19E6   20 B6 19   JSR &19B6
+     19E9   20 B6 19   JSR &19B6
+     19EC   20 B6 19   JSR &19B6
+     19EF   20 B6 19   JSR &19B6
 Macro WAIT_NOPS:
 WAIT3  CYCLES AS NOPS
-     19F9   24 00      BIT &00
+     19F2   24 00      BIT &00
 End macro WAIT_NOPS
 End macro WAIT_CYCLES
 .loop
-     19FB   CA         DEX
-     19FC   F0 22      BEQ &1A20
+     19F4   CA         DEX
+     19F5   F0 25      BEQ &1A1C
 Macro WAIT_CYCLES:
-WAIT121  CYCLES
-     19FE   20 BD 19   JSR &19BD
-     1A01   20 BD 19   JSR &19BD
-     1A04   20 BD 19   JSR &19BD
-     1A07   20 BD 19   JSR &19BD
-     1A0A   20 BD 19   JSR &19BD
-     1A0D   20 BD 19   JSR &19BD
-     1A10   20 BD 19   JSR &19BD
-     1A13   20 BD 19   JSR &19BD
-     1A16   20 BD 19   JSR &19BD
-     1A19   20 BD 19   JSR &19BD
+WAIT114  CYCLES
+     19F7   20 B6 19   JSR &19B6
+     19FA   20 B6 19   JSR &19B6
+     19FD   20 B6 19   JSR &19B6
+     1A00   20 B6 19   JSR &19B6
+     1A03   20 B6 19   JSR &19B6
+     1A06   20 B6 19   JSR &19B6
+     1A09   20 B6 19   JSR &19B6
+     1A0C   20 B6 19   JSR &19B6
+     1A0F   20 B6 19   JSR &19B6
 Macro WAIT_NOPS:
-WAIT1  CYCLES AS NOPS
-     1A1C   33
-1 cycle NOP is Master only and not emulated by b-em.
+WAIT6  CYCLES AS NOPS
+     1A12   EA         NOP
+     1A13   EA         NOP
+     1A14   EA         NOP
 End macro WAIT_NOPS
 End macro WAIT_CYCLES
-     1A1D   4C FB 19   JMP &19FB
+Macro WAIT_CYCLES:
+WAIT7  CYCLES
+Macro WAIT_NOPS:
+WAIT7  CYCLES AS NOPS
+     1A15   24 00      BIT &00
+     1A17   EA         NOP
+     1A18   EA         NOP
+End macro WAIT_NOPS
+End macro WAIT_CYCLES
+     1A19   4C F4 19   JMP &19F4
 .done
-     1A20   60         RTS
+     1A1C   60         RTS
 .main_end
 .fx_start
 .fx_init_function
-     1A21   A9 00      LDA #&00
-     1A23   85 78      STA &78
-     1A25   85 79      STA &79
-     1A27   AD 34 FE   LDA &FE34
-     1A2A   29 FB      AND #&FB
-     1A2C   8D 34 FE   STA &FE34
-     1A2F   A2 31      LDX #&31
-     1A31   A0 1B      LDY #&1B
-     1A33   A9 30      LDA #&30
-     1A35   20 FA 1A   JSR &1AFA
-     1A38   A2 35      LDX #&35
-     1A3A   A0 1B      LDY #&1B
-     1A3C   A9 26      LDA #&26
-     1A3E   20 FA 1A   JSR &1AFA
-     1A41   60         RTS
+     1A1D   A9 00      LDA #&00
+     1A1F   85 78      STA &78
+     1A21   85 79      STA &79
+     1A23   AD 34 FE   LDA &FE34
+     1A26   29 FB      AND #&FB
+     1A28   8D 34 FE   STA &FE34
+     1A2B   A2 2D      LDX #&2D
+     1A2D   A0 1B      LDY #&1B
+     1A2F   A9 30      LDA #&30
+     1A31   20 F6 1A   JSR &1AF6
+     1A34   A2 31      LDX #&31
+     1A36   A0 1B      LDY #&1B
+     1A38   A9 26      LDA #&26
+     1A3A   20 F6 1A   JSR &1AF6
+     1A3D   60         RTS
 .fx_update_function
-     1A42   A2 0F      LDX #&0F
+     1A3E   A2 0F      LDX #&0F
 .loop
-     1A44   BD 00 26   LDA &2600,X
-     1A47   8D 21 FE   STA &FE21
-     1A4A   CA         DEX
-     1A4B   10 F7      BPL &1A44
-     1A4D   60         RTS
+     1A40   BD 00 26   LDA &2600,X
+     1A43   8D 21 FE   STA &FE21
+     1A46   CA         DEX
+     1A47   10 F7      BPL &1A40
+     1A49   60         RTS
 .fx_draw_function
 Macro WAIT_CYCLES:
 WAIT5  CYCLES
 Macro WAIT_NOPS:
 WAIT5  CYCLES AS NOPS
-     1A4E   24 00      BIT &00
-     1A50   EA         NOP
+     1A4A   24 00      BIT &00
+     1A4C   EA         NOP
 End macro WAIT_NOPS
 End macro WAIT_CYCLES
-     1A51   A2 00      LDX #&00
+     1A4D   A2 00      LDX #&00
 .loop
-     1A53   20 BE 19   JSR &19BE
+     1A4F   20 B7 19   JSR &19B7
 Macro WAIT_CYCLES:
 WAIT7  CYCLES
 Macro WAIT_NOPS:
 WAIT7  CYCLES AS NOPS
-     1A56   24 00      BIT &00
-     1A58   EA         NOP
-     1A59   EA         NOP
+     1A52   24 00      BIT &00
+     1A54   EA         NOP
+     1A55   EA         NOP
 End macro WAIT_NOPS
 End macro WAIT_CYCLES
-     1A5A   BD 00 28   LDA &2800,X
-     1A5D   8D 91 1A   STA &1A91
-     1A60   BD 80 28   LDA &2880,X
-     1A63   8D 96 1A   STA &1A96
-     1A66   BD 00 29   LDA &2900,X
-     1A69   8D 9B 1A   STA &1A9B
-     1A6C   BD 80 29   LDA &2980,X
-     1A6F   8D A0 1A   STA &1AA0
-     1A72   BD 00 2A   LDA &2A00,X
-     1A75   8D A5 1A   STA &1AA5
-     1A78   BD 80 2A   LDA &2A80,X
-     1A7B   8D AA 1A   STA &1AAA
-     1A7E   BD 00 2B   LDA &2B00,X
-     1A81   8D AF 1A   STA &1AAF
-     1A84   BD 00 27   LDA &2700,X
-     1A87   BC 80 27   LDY &2780,X
-     1A8A   8D 21 FE   STA &FE21
-     1A8D   8C 21 FE   STY &FE21
+     1A56   BD 00 28   LDA &2800,X
+     1A59   8D 8D 1A   STA &1A8D
+     1A5C   BD 80 28   LDA &2880,X
+     1A5F   8D 92 1A   STA &1A92
+     1A62   BD 00 29   LDA &2900,X
+     1A65   8D 97 1A   STA &1A97
+     1A68   BD 80 29   LDA &2980,X
+     1A6B   8D 9C 1A   STA &1A9C
+     1A6E   BD 00 2A   LDA &2A00,X
+     1A71   8D A1 1A   STA &1AA1
+     1A74   BD 80 2A   LDA &2A80,X
+     1A77   8D A6 1A   STA &1AA6
+     1A7A   BD 00 2B   LDA &2B00,X
+     1A7D   8D AB 1A   STA &1AAB
+     1A80   BD 00 27   LDA &2700,X
+     1A83   BC 80 27   LDY &2780,X
+     1A86   8D 21 FE   STA &FE21
+     1A89   8C 21 FE   STY &FE21
 .load2
-     1A90   A9 00      LDA #&00
-     1A92   8D 21 FE   STA &FE21
+     1A8C   A9 00      LDA #&00
+     1A8E   8D 21 FE   STA &FE21
 .load3
-     1A95   A9 00      LDA #&00
-     1A97   8D 21 FE   STA &FE21
+     1A91   A9 00      LDA #&00
+     1A93   8D 21 FE   STA &FE21
 .load4
-     1A9A   A9 00      LDA #&00
-     1A9C   8D 21 FE   STA &FE21
+     1A96   A9 00      LDA #&00
+     1A98   8D 21 FE   STA &FE21
 .load5
-     1A9F   A9 00      LDA #&00
-     1AA1   8D 21 FE   STA &FE21
+     1A9B   A9 00      LDA #&00
+     1A9D   8D 21 FE   STA &FE21
 .load6
-     1AA4   A9 00      LDA #&00
-     1AA6   8D 21 FE   STA &FE21
+     1AA0   A9 00      LDA #&00
+     1AA2   8D 21 FE   STA &FE21
 .load7
-     1AA9   A9 00      LDA #&00
-     1AAB   8D 21 FE   STA &FE21
+     1AA5   A9 00      LDA #&00
+     1AA7   8D 21 FE   STA &FE21
 .load8
-     1AAE   A9 00      LDA #&00
-     1AB0   8D 21 FE   STA &FE21
-     1AB3   E8         INX
-     1AB4   E0 80      CPX #&80
-     1AB6   D0 9B      BNE &1A53
-     1AB8   60         RTS
+     1AAA   A9 00      LDA #&00
+     1AAC   8D 21 FE   STA &FE21
+     1AAF   E8         INX
+     1AB0   E0 80      CPX #&80
+     1AB2   D0 9B      BNE &1A4F
+     1AB4   60         RTS
 .fx_kill_function
-     1AB9   A2 0D      LDX #&0D
+     1AB5   A2 0D      LDX #&0D
 .loop
-     1ABB   8E 00 FE   STX &FE00
-     1ABE   BD C8 1A   LDA &1AC8,X
-     1AC1   8D 01 FE   STA &FE01
-     1AC4   CA         DEX
-     1AC5   10 F4      BPL &1ABB
-     1AC7   60         RTS
+     1AB7   8E 00 FE   STX &FE00
+     1ABA   BD C4 1A   LDA &1AC4,X
+     1ABD   8D 01 FE   STA &FE01
+     1AC0   CA         DEX
+     1AC1   10 F4      BPL &1AB7
+     1AC3   60         RTS
 .fx_end
 .data_start
 .crtc_regs_default
-     1AC8   7F
-     1AC9   50
-     1ACA   62
-     1ACB   28
-     1ACC   26
-     1ACD   00
+     1AC4   7F
+     1AC5   50
+     1AC6   62
+     1AC7   28
+     1AC8   26
+     1AC9   00
+     1ACA   20
+     1ACB   23
+     1ACC   00
+     1ACD   07
      1ACE   20
-     1ACF   23
-     1AD0   00
-     1AD1   07
-     1AD2   20
-     1AD3   08
-     1AD4   06
-     1AD5   00
+     1ACF   08
+     1AD0   06
+     1AD1   00
 .beeb_disksys_start
 .osfile_params
 .osfile_nameaddr
-     1AD6   FF FF
+     1AD2   FF FF
 .osfile_loadaddr
-     1AD8   00 00 00 00
+     1AD4   00 00 00 00
 .osfile_execaddr
-     1ADC   00 00 00 00
+     1AD8   00 00 00 00
 .osfile_length
-     1AE0   00 00 00 00
+     1ADC   00 00 00 00
 .osfile_endaddr
-     1AE4   00 00 00 00
+     1AE0   00 00 00 00
 .disksys_load_direct
-     1AE8   8D D9 1A   STA &1AD9
-     1AEB   8E D6 1A   STX &1AD6
-     1AEE   8C D7 1A   STY &1AD7
-     1AF1   A2 D6      LDX #&D6
-     1AF3   A0 1A      LDY #&1A
-     1AF5   A9 FF      LDA #&FF
-     1AF7   4C DD FF   JMP &FFDD
+     1AE4   8D D5 1A   STA &1AD5
+     1AE7   8E D2 1A   STX &1AD2
+     1AEA   8C D3 1A   STY &1AD3
+     1AED   A2 D2      LDX #&D2
+     1AEF   A0 1A      LDY #&1A
+     1AF1   A9 FF      LDA #&FF
+     1AF3   4C DD FF   JMP &FFDD
 .disksys_load_file
-     1AFA   8D 08 1B   STA &1B08
-     1AFD   AD 08 1B   LDA &1B08
-     1B00   10 02      BPL &1B04
-     1B02   A9 30      LDA #&30
+     1AF6   8D 04 1B   STA &1B04
+     1AF9   AD 04 1B   LDA &1B04
+     1AFC   10 02      BPL &1B00
+     1AFE   A9 30      LDA #&30
 .load_direct
-     1B04   20 E8 1A   JSR &1AE8
+     1B00   20 E4 1A   JSR &1AE4
 .write_to
-     1B07   A2 FF      LDX #&FF
-     1B09   10 25      BPL &1B30
-     1B0B   AC E1 1A   LDY &1AE1
-     1B0E   AD E0 1A   LDA &1AE0
-     1B11   F0 01      BEQ &1B14
-     1B13   C8         INY
+     1B03   A2 FF      LDX #&FF
+     1B05   10 25      BPL &1B2C
+     1B07   AC DD 1A   LDY &1ADD
+     1B0A   AD DC 1A   LDA &1ADC
+     1B0D   F0 01      BEQ &1B10
+     1B0F   C8         INY
 .no_extra_page
-     1B14   A9 30      LDA #&30
+     1B10   A9 30      LDA #&30
 .disksys_copy_block
-     1B16   8D 20 1B   STA &1B20
-     1B19   8E 23 1B   STX &1B23
-     1B1C   A2 00      LDX #&00
+     1B12   8D 1C 1B   STA &1B1C
+     1B15   8E 1F 1B   STX &1B1F
+     1B18   A2 00      LDX #&00
 .read_from
-     1B1E   BD 00 FF   LDA &FF00,X
+     1B1A   BD 00 FF   LDA &FF00,X
 .write_to
-     1B21   9D 00 FF   STA &FF00,X
-     1B24   E8         INX
-     1B25   D0 F7      BNE &1B1E
-     1B27   EE 20 1B   INC &1B20
-     1B2A   EE 23 1B   INC &1B23
-     1B2D   88         DEY
-     1B2E   D0 EE      BNE &1B1E
+     1B1D   9D 00 FF   STA &FF00,X
+     1B20   E8         INX
+     1B21   D0 F7      BNE &1B1A
+     1B23   EE 1C 1B   INC &1B1C
+     1B26   EE 1F 1B   INC &1B1F
+     1B29   88         DEY
+     1B2A   D0 EE      BNE &1B1A
 .disksys_copy_block_return
-     1B30   60         RTS
+     1B2C   60         RTS
 .beeb_disksys_end
 .file1
-     1B31   50 49 43 
-     1B34   0D
+     1B2D   50 49 43 
+     1B30   0D
 .file2
-     1B35   50 41 4C 
-     1B38   0D
+     1B31   50 41 4C 
+     1B34   0D
 Macro PAGE_ALIGN:
-ALIGN LOST &C7  BYTES
+ALIGN LOST &CB  BYTES
 End macro PAGE_ALIGN
 .twister_vram_table_LO
      1C00   00
@@ -4543,9 +4549,9 @@ Saving file 'MyFX'
 ------
 RASTER FX
 ------
-MAIN size =&121 
+MAIN size =&11D 
 FX size = &A7 
-DATA size =&1238 
+DATA size =&123C 
 BSS size =&0 
 ------
 HIGH WATERMARK =&2D00 
